@@ -16,6 +16,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     url TEXT NOT NULL UNIQUE,
+    refresh_sec INTEGER,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
   CREATE TABLE IF NOT EXISTS checks (
@@ -31,23 +32,32 @@ db.exec(`
 `);
 
 // --- migrations ---
-for (const { table, name, ddl } of [{ table: 'sites', name: 'refresh_ms', ddl: 'INTEGER' }]) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
-  if (!cols.some((c) => c.name === name)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl}`);
-    console.log(`[db] migrated: added ${table}.${name}`);
+// v0.2.2: refresh interval is stored in seconds (was milliseconds).
+{
+  const cols = db.prepare('PRAGMA table_info(sites)').all().map((c) => c.name);
+  if (!cols.includes('refresh_sec')) {
+    db.exec('ALTER TABLE sites ADD COLUMN refresh_sec INTEGER');
+    if (cols.includes('refresh_ms')) {
+      db.exec('UPDATE sites SET refresh_sec = CAST(ROUND(refresh_ms / 1000.0) AS INTEGER)');
+      try {
+        db.exec('ALTER TABLE sites DROP COLUMN refresh_ms');
+      } catch (err) {
+        console.error('[db] could not drop legacy refresh_ms column:', err.message);
+      }
+    }
+    console.log('[db] migrated: sites.refresh_ms (ms) -> sites.refresh_sec (s)');
   }
 }
 
 export function listSites() {
-  return db.prepare('SELECT id, name, url, refresh_ms, created_at FROM sites ORDER BY name').all();
+  return db.prepare('SELECT id, name, url, refresh_sec, created_at FROM sites ORDER BY name').all();
 }
 
-export function addSite(name, url, refreshMs = null) {
+export function addSite(name, url, refreshSec = null) {
   const info = db
-    .prepare('INSERT INTO sites (name, url, refresh_ms) VALUES (?, ?, ?)')
-    .run(name, url, refreshMs);
-  return { id: Number(info.lastInsertRowid), name, url, refreshMs };
+    .prepare('INSERT INTO sites (name, url, refresh_sec) VALUES (?, ?, ?)')
+    .run(name, url, refreshSec);
+  return { id: Number(info.lastInsertRowid), name, url, refreshSec };
 }
 
 /**
@@ -56,25 +66,25 @@ export function addSite(name, url, refreshMs = null) {
  */
 export function upsertSites(sites) {
   const stmt = db.prepare(`
-    INSERT INTO sites (name, url, refresh_ms) VALUES (?, ?, ?)
+    INSERT INTO sites (name, url, refresh_sec) VALUES (?, ?, ?)
     ON CONFLICT(url) DO UPDATE SET
       name = excluded.name,
-      refresh_ms = COALESCE(excluded.refresh_ms, sites.refresh_ms)
+      refresh_sec = COALESCE(excluded.refresh_sec, sites.refresh_sec)
   `);
   let n = 0;
   for (const s of sites) {
-    stmt.run(s.name, s.url, s.refreshMs ?? null);
+    stmt.run(s.name, s.url, s.refreshSec ?? null);
     n++;
   }
   return n;
 }
 
-export function updateSite(id, { name, refreshMs }) {
+export function updateSite(id, { name, refreshSec }) {
   const existing = db.prepare('SELECT id FROM sites WHERE id = ?').get(id);
   if (!existing) return null;
   if (name !== undefined) db.prepare('UPDATE sites SET name = ? WHERE id = ?').run(name, id);
-  if (refreshMs !== undefined) db.prepare('UPDATE sites SET refresh_ms = ? WHERE id = ?').run(refreshMs, id);
-  return db.prepare('SELECT id, name, url, refresh_ms, created_at FROM sites WHERE id = ?').get(id);
+  if (refreshSec !== undefined) db.prepare('UPDATE sites SET refresh_sec = ? WHERE id = ?').run(refreshSec, id);
+  return db.prepare('SELECT id, name, url, refresh_sec, created_at FROM sites WHERE id = ?').get(id);
 }
 
 export function removeSite(id) {
@@ -98,7 +108,7 @@ export function pruneOld(retentionDays = RETENTION_DAYS) {
 /** One row per site with its most recent check (null when never checked). */
 export function latestPerSite() {
   return db.prepare(`
-    SELECT s.id, s.name, s.url, s.refresh_ms, s.created_at,
+    SELECT s.id, s.name, s.url, s.refresh_sec, s.created_at,
            c.checked_at, c.status_code, c.ok, c.response_time_ms, c.error
     FROM sites s
     LEFT JOIN checks c ON c.id = (
@@ -132,8 +142,8 @@ export const uptime24h = (id) => uptime(id, '-24 hours');
 export const uptime7d = (id) => uptime(id, '-7 days');
 export const uptime30d = (id) => uptime(id, '-30 days');
 
-/** Average response time (ms) of successful checks in the last 24h, or null. */
-export function avgLatency24h(siteId) {
+/** Average response time (seconds, 2 decimals) of successful checks in the last 24h, or null. */
+export function avgLatencySec(siteId) {
   const row = db
     .prepare(
       `SELECT AVG(response_time_ms) AS avg FROM checks
@@ -141,5 +151,5 @@ export function avgLatency24h(siteId) {
          AND checked_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-24 hours')`
     )
     .get(siteId);
-  return row && row.avg != null ? Math.round(row.avg) : null;
+  return row && row.avg != null ? Math.round((row.avg / 1000) * 100) / 100 : null;
 }

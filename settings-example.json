@@ -1,5 +1,5 @@
 {
-  "defaultRefreshMs": 300000,
+  "defaultRefreshSec": 300,
   "sites": [
     {
       "name": "Google",
@@ -8,7 +8,7 @@
     {
       "name": "My blog",
       "url": "https://example.com/blog",
-      "refreshMs": 60000
+      "refreshSec": 60
     }
   ]
 }

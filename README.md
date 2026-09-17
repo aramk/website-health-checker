@@ -24,20 +24,22 @@ committed). Edit it and restart to configure your sites.
 
 ```json
 {
-  "defaultRefreshMs": 300000,
+  "defaultRefreshSec": 300,
   "sites": [
     { "name": "Google", "url": "https://www.google.com" },
-    { "name": "My blog", "url": "https://example.com/blog", "refreshMs": 60000 }
+    { "name": "My blog", "url": "https://example.com/blog", "refreshSec": 60 }
   ]
 }
 ```
+All times are in seconds.
 
-- `defaultRefreshMs` — how often every site is checked (default: 5 minutes).
+- `defaultRefreshSec` — how often every site is checked, in seconds (default: 300 = 5 minutes).
 - `sites` — sites to monitor. Each has `name`, `url`, and an optional
-  `refreshMs` that overrides the default for that site.
+  `refreshSec` that overrides the default for that site (minimum 5; lower
+  values are raised to 5).
 - On startup the listed sites are **upserted** into the database (matched by
   URL): new ones are added, and the name / per-site refresh of existing ones
-  is updated. A `refreshMs` omitted in the file keeps whatever is stored.
+  is updated. A `refreshSec` omitted in the file keeps whatever is stored.
 - Edit `settings.json` and restart the server to apply changes.
 
 ### Env vars
@@ -45,7 +47,7 @@ committed). Edit it and restart to configure your sites.
 | Var                | Default    | What it does                              |
 | ------------------ | ---------- | ----------------------------------------- |
 | `PORT`             | `3000`     | HTTP port for the dashboard + API         |
-| `CHECK_TIMEOUT_MS` | `10000`    | Per-request timeout; slower = down        |
+| `CHECK_TIMEOUT_SEC` | `10`       | Per-request timeout, in seconds; slower = down |
 | `DATA_DIR`         | `./data`   | Directory holding the `health.db` SQLite file |
 | `SETTINGS_PATH`    | `./settings.json` | Where to read settings from          |
 
@@ -53,13 +55,13 @@ committed). Edit it and restart to configure your sites.
 
 - `GET /` — dashboard
 - `GET /api/health` — server health
-- `GET /api/sites` — all sites: latest check, effective `refreshMs`, `avgLatencyMs` (successful checks, last 24h), and `uptime24h` / `uptime7d` / `uptime30d`; plus the global `defaultRefreshMs`
-- `POST /api/sites` — `{name, url, refreshMs?}` → 201 (409 if the URL is already monitored)
-- `PATCH /api/sites/:id` — `{name?, refreshMs?}` (`refreshMs: null` resets to the default)
+- `GET /api/sites` — all sites: latest check, effective `refreshSec`, `avgLatencySec` (successful checks, last 24h), and `uptime24h` / `uptime7d` / `uptime30d`; plus the global `defaultRefreshSec`
+- `POST /api/sites` — `{name, url, refreshSec?}` → 201 (409 if the URL is already monitored)
+- `PATCH /api/sites/:id` — `{name?, refreshSec?}` (`refreshSec: null` resets to the default)
 - `DELETE /api/sites/:id` — stop monitoring (deletes history too)
 - `GET /api/sites/:id/checks?limit=60` — recent check history
 
-`refreshMs` is in milliseconds, minimum 5000. The scheduler wakes every
+`refreshSec` is in seconds, minimum 5. The scheduler wakes every
 10 seconds and checks the sites that are due. The dashboard re-pulls data as
 often as the fastest site's refresh interval (or the global default when no
 sites are monitored).

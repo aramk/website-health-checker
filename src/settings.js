@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-export const DEFAULT_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
+export const DEFAULT_REFRESH_SEC = 300; // 5 minutes
+export const MIN_REFRESH_SEC = 5;
 
 export function validUrl(value) {
   try {
@@ -20,28 +21,29 @@ function cleanSite(entry) {
   const name = entry.name.trim();
   const url = entry.url.trim();
   if (!name || !validUrl(url)) return null;
-  const refreshMs = Number(entry.refreshMs);
-  return { name, url, refreshMs: refreshMs > 0 ? refreshMs : null };
+  const refreshSec = Number(entry.refreshSec);
+  return { name, url, refreshSec: refreshSec > 0 ? Math.max(Math.round(refreshSec), MIN_REFRESH_SEC) : null };
 }
 
 /**
  * Load ./settings.json (or SETTINGS_PATH). Missing file -> defaults with no
  * sites. Invalid JSON -> defaults with a warning. Never throws.
+ * All times are in seconds.
  */
 export function loadSettings() {
   const path = process.env.SETTINGS_PATH || join(rootDir, 'settings.json');
-  if (!existsSync(path)) return { defaultRefreshMs: DEFAULT_REFRESH_MS, sites: [], path, found: false };
+  if (!existsSync(path)) return { defaultRefreshSec: DEFAULT_REFRESH_SEC, sites: [], path, found: false };
 
   let parsed;
   try {
     parsed = JSON.parse(readFileSync(path, 'utf8'));
   } catch (err) {
     console.error(`[settings] invalid JSON in ${path}, using defaults: ${err.message}`);
-    return { defaultRefreshMs: DEFAULT_REFRESH_MS, sites: [], path, found: true };
+    return { defaultRefreshSec: DEFAULT_REFRESH_SEC, sites: [], path, found: true };
   }
 
-  const defaultRefreshMs =
-    Number(parsed?.defaultRefreshMs) > 0 ? Number(parsed.defaultRefreshMs) : DEFAULT_REFRESH_MS;
+  const defaultRefreshSec =
+    Number(parsed?.defaultRefreshSec) > 0 ? Number(parsed.defaultRefreshSec) : DEFAULT_REFRESH_SEC;
 
   const sites = [];
   if (Array.isArray(parsed?.sites)) {
@@ -52,5 +54,5 @@ export function loadSettings() {
     }
   }
 
-  return { defaultRefreshMs, sites, path, found: true };
+  return { defaultRefreshSec, sites, path, found: true };
 }

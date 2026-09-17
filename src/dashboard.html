@@ -18,7 +18,7 @@
   .add input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 9px 12px; font-size: 14px; }
   .add input[name="name"] { flex: 2; min-width: 150px; }
   .add input[name="url"] { flex: 3; min-width: 200px; }
-  .add input[name="refreshMin"] { flex: 0 0 130px; }
+  .add input[name="refreshSec"] { flex: 0 0 130px; }
   .add button { background: #2f6fed; border: none; border-radius: 6px; color: #fff; padding: 9px 18px; font-size: 14px; cursor: pointer; }
   .add button:hover { background: #2459c9; }
   #error { color: var(--down); font-size: 14px; margin-bottom: 12px; min-height: 20px; }
@@ -56,7 +56,7 @@
   <form class="add" id="addForm">
     <input name="name" id="name" placeholder="Name (e.g. My blog)" required maxlength="80">
     <input name="url" id="url" placeholder="https://example.com" required inputmode="url">
-    <input name="refreshMin" id="refreshMin" type="number" min="0" step="any" placeholder="Every N min (opt)">
+    <input name="refreshSec" id="refreshSec" type="number" min="0" step="any" placeholder="Every N sec (opt)">
     <button type="submit">Add site</button>
   </form>
   <div id="error"></div>
@@ -79,11 +79,11 @@ function relTime(iso) {
   return Math.floor(h / 24) + 'd ago';
 }
 
-function fmtInterval(ms) {
-  if (ms == null) return '—';
-  if (ms < 60000) return Math.round(ms / 1000) + 's';
-  if (ms < 3600000) { const m = ms / 60000; return (Number.isInteger(m) ? m : m.toFixed(1)) + 'm'; }
-  const h = ms / 3600000; return (Number.isInteger(h) ? h : h.toFixed(1)) + 'h';
+function fmtInterval(sec) {
+  if (sec == null) return '—';
+  if (sec < 60) return sec + 's';
+  if (sec < 3600) { const m = sec / 60; return (Number.isInteger(m) ? m : m.toFixed(1)) + 'm'; }
+  const h = sec / 3600; return (Number.isInteger(h) ? h : h.toFixed(1)) + 'h';
 }
 
 function esc(s) {
@@ -103,8 +103,9 @@ async function sparkline(siteId) {
     const ordered = checks.slice().reverse();
     if (!ordered.length) return '<div class="spark"></div>';
     const bars = ordered.map(c => {
-      const h = c.response_time_ms ? Math.min(26, 4 + Math.log10(c.response_time_ms + 1) * 8) : 6;
-      return `<i class="${c.ok ? '' : 'down'}" style="height:${h.toFixed(0)}px" title="${esc(c.checked_at)}${c.status_code ? ' · ' + c.status_code : ''}${c.response_time_ms != null ? ' · ' + c.response_time_ms + 'ms' : ''}"></i>`;
+      const ms = (c.response_time_sec ?? 0) * 1000;
+      const h = ms ? Math.min(26, 4 + Math.log10(ms + 1) * 8) : 6;
+      return `<i class="${c.ok ? '' : 'down'}" style="height:${h.toFixed(0)}px" title="${esc(c.checked_at)}${c.status_code ? ' · ' + c.status_code : ''}${c.response_time_sec != null ? ' · ' + c.response_time_sec + 's' : ''}"></i>`;
     }).join('');
     return `<div class="spark">${bars}</div>`;
   } catch { return '<div class="spark"></div>'; }
@@ -118,20 +119,20 @@ function refreshNow() {
   load();
 }
 
-/** Refresh as often as the fastest site (or the global default when empty). */
-function nextPollMs(sites, defaultMs) {
+/** Refresh as often as the fastest site (or the global default when empty). Returns seconds. */
+function nextPollSec(sites, defaultSec) {
   const base = sites.length
-    ? Math.min(...sites.map((s) => s.refreshMs).filter((ms) => Number.isFinite(ms) && ms > 0))
-    : defaultMs;
-  return Math.max(Number.isFinite(base) && base > 0 ? base : 15000, 5000);
+    ? Math.min(...sites.map((s) => s.refreshSec).filter((sec) => Number.isFinite(sec) && sec > 0))
+    : defaultSec;
+  return Math.max(Number.isFinite(base) && base > 0 ? base : 15, 5);
 }
 
 async function load() {
-  let sites = [], defaultRefreshMs;
+  let sites = [], defaultRefreshSec;
   try {
     const r = await fetch('/api/sites');
     if (!r.ok) throw new Error('API error ' + r.status);
-    ({ sites, defaultRefreshMs } = await r.json());
+    ({ sites, defaultRefreshSec } = await r.json());
     const up = sites.filter(s => s.latest && s.latest.ok).length;
     const down = sites.filter(s => s.latest && !s.latest.ok).length;
     const pending = sites.length - up - down;
@@ -151,8 +152,8 @@ async function load() {
         <div class="url"><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a></div>
         <div class="stats">
           <span>Status <b>${esc(status)}</b></span>
-          <span title="average of successful checks, last 24h">Avg latency <b>${s.avgLatencyMs != null ? s.avgLatencyMs + 'ms' : '—'}</b></span>
-          <span>Every <b>${fmtInterval(s.refreshMs)}</b></span>
+          <span title="average of successful checks, last 24h">Avg latency <b>${s.avgLatencySec != null ? s.avgLatencySec + 's' : '—'}</b></span>
+          <span>Every <b>${fmtInterval(s.refreshSec)}</b></span>
         </div>
         <div class="stats">
           <span>24h ${uptimeCell(s.uptime24h)}</span>
@@ -173,7 +174,7 @@ async function load() {
     errorBox.textContent = 'Could not load sites: ' + e.message;
   }
   clearTimeout(pollTimer);
-  pollTimer = setTimeout(load, nextPollMs(sites, defaultRefreshMs));
+  pollTimer = setTimeout(load, nextPollSec(sites, defaultRefreshSec) * 1000);
 }
 
 document.getElementById('addForm').addEventListener('submit', async (e) => {
@@ -181,9 +182,9 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
   errorBox.textContent = '';
   const name = document.getElementById('name').value.trim();
   const url = document.getElementById('url').value.trim();
-  const refreshMin = document.getElementById('refreshMin').value.trim();
+  const refreshSec = document.getElementById('refreshSec').value.trim();
   const body = { name, url };
-  if (refreshMin !== '') body.refreshMs = Math.round(Number(refreshMin) * 60000);
+  if (refreshSec !== '') body.refreshSec = Math.round(Number(refreshSec));
   try {
     const r = await fetch('/api/sites', {
       method: 'POST',
@@ -194,7 +195,7 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
     if (!r.ok) throw new Error(data.error || 'request failed');
     document.getElementById('name').value = '';
     document.getElementById('url').value = '';
-    document.getElementById('refreshMin').value = '';
+    document.getElementById('refreshSec').value = '';
     refreshNow();
   } catch (err) { errorBox.textContent = err.message; }
 });

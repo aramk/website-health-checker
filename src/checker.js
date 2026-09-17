@@ -3,17 +3,20 @@ import { latestPerSite, recordCheck, pruneOld, RETENTION_DAYS } from './db.js';
 const TICK_MS = 10_000; // scheduler granularity: due sites are picked up each tick
 const PRUNE_EVERY_MS = 24 * 60 * 60 * 1000;
 
+const fmtSec = (ms) => `${parseFloat((ms / 1000).toFixed(2))}s`;
+
 /**
  * Check one URL. Resolves to { status_code, ok, response_time_ms, error }.
  * A site counts as up when it answers with a 2xx/3xx status in time.
+ * (response_time_ms stays millisecond-precise internally; boundaries use seconds.)
  */
-export async function checkSite(url, timeoutMs) {
+export async function checkSite(url, timeoutSec) {
   const started = Date.now();
   try {
     const res = await fetch(url, {
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(timeoutSec * 1000),
       redirect: 'follow',
-      headers: { 'user-agent': 'website-health-checker/0.2' },
+      headers: { 'user-agent': 'website-health-checker/0.2.2' },
     });
     try {
       await res.body?.cancel();
@@ -42,9 +45,9 @@ export async function checkSite(url, timeoutMs) {
 
 /**
  * Every TICK_MS, check sites whose last check is older than their refresh
- * interval. getRefreshMs(site) resolves the effective interval for a site.
+ * interval. getRefreshSec(site) resolves the effective interval in seconds.
  */
-export function startScheduler({ timeoutMs, getRefreshMs, retentionDays = RETENTION_DAYS }) {
+export function startScheduler({ timeoutSec, getRefreshSec, retentionDays = RETENTION_DAYS }) {
   let lastPrune = 0;
 
   const tick = async () => {
@@ -63,18 +66,18 @@ export function startScheduler({ timeoutMs, getRefreshMs, retentionDays = RETENT
     const sites = latestPerSite();
     const due = sites.filter((s) => {
       if (!s.checked_at) return true; // never checked
-      return now - new Date(s.checked_at).getTime() >= getRefreshMs(s);
+      return now - new Date(s.checked_at).getTime() >= getRefreshSec(s) * 1000;
     });
     if (!due.length) return;
 
     await Promise.allSettled(
       due.map(async (site) => {
-        const result = await checkSite(site.url, timeoutMs);
+        const result = await checkSite(site.url, timeoutSec);
         recordCheck(site.id, result);
         console.log(
           `[check] ${site.url} -> ${result.ok ? 'UP' : 'DOWN'}` +
             ` ${result.status_code ?? '-'}` +
-            ` ${result.response_time_ms}ms` +
+            ` ${fmtSec(result.response_time_ms)}` +
             (result.error ? ` :: ${result.error}` : '')
         );
       })
