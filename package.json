@@ -1,1 +1,15 @@
-{"description":"Monitor websites on a schedule, store results in SQLite, view them on a dashboard.","engines":{"node":">=26"},"license":"MIT","main":"src/server.js","name":"website-health-checker","scripts":{"start":"node src/server.js"},"type":"module","version":"0.2.0"}
+{
+  "description": "Monitor websites on a schedule, store results in SQLite, view them on a dashboard.",
+  "engines": {
+    "node": ">=26"
+  },
+  "license": "MIT",
+  "main": "src/server.js",
+  "name": "website-health-checker",
+  "scripts": {
+    "prestart": "node scripts/ensure-settings.js",
+    "start": "node src/server.js"
+  },
+  "type": "module",
+  "version": "0.2.0"
+}

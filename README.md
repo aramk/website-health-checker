@@ -2,7 +2,8 @@
 
 A tiny self-hosted website monitor. A Node.js server checks your sites on a
 schedule, stores every result in a local SQLite file, and serves a dashboard
-with the latest status, latency, uptime (24h / 7d / 30d), and recent history.
+with the latest status, average latency, uptime (24h / 7d / 30d), and recent
+history.
 
 Zero npm dependencies — just Node.js 26+ (uses the built-in `node:sqlite`).
 
@@ -13,18 +14,19 @@ npm start
 # dashboard at http://localhost:3000
 ```
 
+On the first run, `settings.json` is created automatically from
+`settings-example.json` (it's gitignored — your local config never gets
+committed). Edit it and restart to configure your sites.
+
 ## Configuration
 
 ### settings.json
-
-Copy `settings-example.json` to `settings.json` (gitignored — your local
-config never gets committed):
 
 ```json
 {
   "defaultRefreshMs": 300000,
   "sites": [
-    { "name": "Example", "url": "https://example.com" },
+    { "name": "Google", "url": "https://www.google.com" },
     { "name": "My blog", "url": "https://example.com/blog", "refreshMs": 60000 }
   ]
 }
@@ -51,14 +53,16 @@ config never gets committed):
 
 - `GET /` — dashboard
 - `GET /api/health` — server health
-- `GET /api/sites` — all sites: latest check, effective `refreshMs`, and `uptime24h` / `uptime7d` / `uptime30d`
+- `GET /api/sites` — all sites: latest check, effective `refreshMs`, `avgLatencyMs` (successful checks, last 24h), and `uptime24h` / `uptime7d` / `uptime30d`; plus the global `defaultRefreshMs`
 - `POST /api/sites` — `{name, url, refreshMs?}` → 201 (409 if the URL is already monitored)
 - `PATCH /api/sites/:id` — `{name?, refreshMs?}` (`refreshMs: null` resets to the default)
 - `DELETE /api/sites/:id` — stop monitoring (deletes history too)
 - `GET /api/sites/:id/checks?limit=60` — recent check history
 
 `refreshMs` is in milliseconds, minimum 5000. The scheduler wakes every
-10 seconds and checks the sites that are due.
+10 seconds and checks the sites that are due. The dashboard re-pulls data as
+often as the fastest site's refresh interval (or the global default when no
+sites are monitored).
 
 A site counts as **up** when it answers with a 2xx/3xx status inside the
 timeout. Check history is retained for one year per site, then pruned.
@@ -72,7 +76,9 @@ src/
   db.js          # SQLite schema, migrations + queries (node:sqlite)
   settings.js    # settings.json loading + validation
   dashboard.html # dashboard UI (vanilla JS, auto-refreshes)
-settings-example.json  # copy to settings.json to configure
+scripts/
+  ensure-settings.js  # `prestart`: creates settings.json from the example
+settings-example.json  # copied to settings.json on first `npm start`
 data/
   health.db      # created on first run (gitignored)
 ```

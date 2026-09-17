@@ -131,3 +131,15 @@ export function uptime(siteId, window) {
 export const uptime24h = (id) => uptime(id, '-24 hours');
 export const uptime7d = (id) => uptime(id, '-7 days');
 export const uptime30d = (id) => uptime(id, '-30 days');
+
+/** Average response time (ms) of successful checks in the last 24h, or null. */
+export function avgLatency24h(siteId) {
+  const row = db
+    .prepare(
+      `SELECT AVG(response_time_ms) AS avg FROM checks
+       WHERE site_id = ? AND ok = 1 AND response_time_ms IS NOT NULL
+         AND checked_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-24 hours')`
+    )
+    .get(siteId);
+  return row && row.avg != null ? Math.round(row.avg) : null;
+}

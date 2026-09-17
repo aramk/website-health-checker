@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Website Health</title>
+<title>Website Health Checker</title>
 <style>
   :root { --bg: #0f1115; --card: #171b22; --border: #262c36; --text: #e8ecf1; --muted: #8b94a3; --up: #3fb96c; --down: #e5484d; --warn: #f5a524; }
   * { box-sizing: border-box; }
@@ -49,7 +49,7 @@
 </head>
 <body>
 <header>
-  <h1>Website Health</h1>
+  <h1>Website Health Checker</h1>
   <span id="summary"></span>
 </header>
 <main>
@@ -110,11 +110,28 @@ async function sparkline(siteId) {
   } catch { return '<div class="spark"></div>'; }
 }
 
+let pollTimer = null;
+
+/** Reload immediately, cancelling any pending scheduled poll. */
+function refreshNow() {
+  clearTimeout(pollTimer);
+  load();
+}
+
+/** Refresh as often as the fastest site (or the global default when empty). */
+function nextPollMs(sites, defaultMs) {
+  const base = sites.length
+    ? Math.min(...sites.map((s) => s.refreshMs).filter((ms) => Number.isFinite(ms) && ms > 0))
+    : defaultMs;
+  return Math.max(Number.isFinite(base) && base > 0 ? base : 15000, 5000);
+}
+
 async function load() {
+  let sites = [], defaultRefreshMs;
   try {
     const r = await fetch('/api/sites');
     if (!r.ok) throw new Error('API error ' + r.status);
-    const { sites } = await r.json();
+    ({ sites, defaultRefreshMs } = await r.json());
     const up = sites.filter(s => s.latest && s.latest.ok).length;
     const down = sites.filter(s => s.latest && !s.latest.ok).length;
     const pending = sites.length - up - down;
@@ -124,8 +141,7 @@ async function load() {
 
     if (!sites.length) {
       grid.innerHTML = '<div class="empty">Add your first site above — or list defaults in settings.json.</div>';
-      return;
-    }
+    } else {
     const cards = await Promise.all(sites.map(async (s) => {
       const dot = !s.latest ? 'unknown' : s.latest.ok ? 'up' : 'down';
       const status = !s.latest ? 'waiting for first check'
@@ -135,7 +151,7 @@ async function load() {
         <div class="url"><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a></div>
         <div class="stats">
           <span>Status <b>${esc(status)}</b></span>
-          <span>Latency <b>${s.latest?.response_time_ms != null ? s.latest.response_time_ms + 'ms' : '—'}</b></span>
+          <span title="average of successful checks, last 24h">Avg latency <b>${s.avgLatencyMs != null ? s.avgLatencyMs + 'ms' : '—'}</b></span>
           <span>Every <b>${fmtInterval(s.refreshMs)}</b></span>
         </div>
         <div class="stats">
@@ -152,9 +168,12 @@ async function load() {
       </div>`;
     }));
     grid.innerHTML = cards.join('');
+    }
   } catch (e) {
     errorBox.textContent = 'Could not load sites: ' + e.message;
   }
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(load, nextPollMs(sites, defaultRefreshMs));
 }
 
 document.getElementById('addForm').addEventListener('submit', async (e) => {
@@ -176,7 +195,7 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
     document.getElementById('name').value = '';
     document.getElementById('url').value = '';
     document.getElementById('refreshMin').value = '';
-    load();
+    refreshNow();
   } catch (err) { errorBox.textContent = err.message; }
 });
 
@@ -185,11 +204,10 @@ grid.addEventListener('click', async (e) => {
   if (!id) return;
   if (!confirm('Stop monitoring this site? Its history will be deleted.')) return;
   await fetch('/api/sites/' + id, { method: 'DELETE' });
-  load();
+  refreshNow();
 });
 
 load();
-setInterval(load, 15000);
 </script>
 </body>
 </html>

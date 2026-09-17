@@ -12,6 +12,7 @@ import {
   uptime24h,
   uptime7d,
   uptime30d,
+  avgLatency24h,
 } from './db.js';
 import { loadSettings, validUrl } from './settings.js';
 import { startScheduler } from './checker.js';
@@ -70,6 +71,7 @@ function toApiSite(s) {
     uptime24h: uptime24h(s.id),
     uptime7d: uptime7d(s.id),
     uptime30d: uptime30d(s.id),
+    avgLatencyMs: avgLatency24h(s.id),
     latest: s.checked_at
       ? {
           checked_at: s.checked_at,
@@ -98,7 +100,10 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && pathname === '/api/sites') {
-      return sendJson(res, 200, { sites: latestPerSite().map(toApiSite) });
+      return sendJson(res, 200, {
+        sites: latestPerSite().map(toApiSite),
+        defaultRefreshMs: settings.defaultRefreshMs,
+      });
     }
 
     const siteMatch = pathname.match(/^\/api\/sites\/(\d+)(\/checks)?$/);

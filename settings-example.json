@@ -2,8 +2,8 @@
   "defaultRefreshMs": 300000,
   "sites": [
     {
-      "name": "Example",
-      "url": "https://example.com"
+      "name": "Google",
+      "url": "https://www.google.com"
     },
     {
       "name": "My blog",
