@@ -1,0 +1,14 @@
+{
+  "defaultRefreshMs": 300000,
+  "sites": [
+    {
+      "name": "Example",
+      "url": "https://example.com"
+    },
+    {
+      "name": "My blog",
+      "url": "https://example.com/blog",
+      "refreshMs": 60000
+    }
+  ]
+}

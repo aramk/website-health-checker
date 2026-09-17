@@ -1,4 +1,7 @@
-import { listSites, recordCheck } from './db.js';
+import { latestPerSite, recordCheck, pruneOld, RETENTION_DAYS } from './db.js';
+
+const TICK_MS = 10_000; // scheduler granularity: due sites are picked up each tick
+const PRUNE_EVERY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Check one URL. Resolves to { status_code, ok, response_time_ms, error }.
@@ -10,7 +13,7 @@ export async function checkSite(url, timeoutMs) {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
       redirect: 'follow',
-      headers: { 'user-agent': 'website-health-checker/0.1' },
+      headers: { 'user-agent': 'website-health-checker/0.2' },
     });
     try {
       await res.body?.cancel();
@@ -37,12 +40,35 @@ export async function checkSite(url, timeoutMs) {
   }
 }
 
-/** Run one check pass over every site, then repeat on the interval. */
-export function startScheduler({ intervalMs, timeoutMs }) {
+/**
+ * Every TICK_MS, check sites whose last check is older than their refresh
+ * interval. getRefreshMs(site) resolves the effective interval for a site.
+ */
+export function startScheduler({ timeoutMs, getRefreshMs, retentionDays = RETENTION_DAYS }) {
+  let lastPrune = 0;
+
   const tick = async () => {
-    const sites = listSites();
+    const now = Date.now();
+
+    if (now - lastPrune >= PRUNE_EVERY_MS) {
+      try {
+        const n = pruneOld(retentionDays);
+        if (n > 0) console.log(`[db] pruned ${n} check(s) older than ${retentionDays} days`);
+      } catch (err) {
+        console.error('[db] prune failed:', err.message);
+      }
+      lastPrune = now;
+    }
+
+    const sites = latestPerSite();
+    const due = sites.filter((s) => {
+      if (!s.checked_at) return true; // never checked
+      return now - new Date(s.checked_at).getTime() >= getRefreshMs(s);
+    });
+    if (!due.length) return;
+
     await Promise.allSettled(
-      sites.map(async (site) => {
+      due.map(async (site) => {
         const result = await checkSite(site.url, timeoutMs);
         recordCheck(site.id, result);
         console.log(
@@ -54,8 +80,9 @@ export function startScheduler({ intervalMs, timeoutMs }) {
       })
     );
   };
+
   tick().catch((err) => console.error('[scheduler] initial tick failed:', err));
   return setInterval(() => {
     tick().catch((err) => console.error('[scheduler] tick failed:', err));
-  }, intervalMs);
+  }, TICK_MS);
 }

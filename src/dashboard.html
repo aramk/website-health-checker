@@ -14,12 +14,15 @@
   #summary .up { color: var(--up); font-weight: 600; }
   #summary .down { color: var(--down); font-weight: 600; }
   main { padding: 20px 28px; max-width: 1100px; }
-  .add { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
-  .add input { flex: 1; min-width: 180px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 9px 12px; font-size: 14px; }
+  .add { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+  .add input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 9px 12px; font-size: 14px; }
+  .add input[name="name"] { flex: 2; min-width: 150px; }
+  .add input[name="url"] { flex: 3; min-width: 200px; }
+  .add input[name="refreshMin"] { flex: 0 0 130px; }
   .add button { background: #2f6fed; border: none; border-radius: 6px; color: #fff; padding: 9px 18px; font-size: 14px; cursor: pointer; }
   .add button:hover { background: #2459c9; }
   #error { color: var(--down); font-size: 14px; margin-bottom: 12px; min-height: 20px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
   .card .top { display: flex; align-items: center; gap: 10px; }
   .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
@@ -30,8 +33,10 @@
   .card .url { color: var(--muted); font-size: 13px; margin: 6px 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card .url a { color: inherit; text-decoration: none; }
   .card .url a:hover { text-decoration: underline; }
-  .stats { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .stats { display: flex; gap: 16px; font-size: 13px; color: var(--muted); margin-bottom: 10px; flex-wrap: wrap; }
   .stats b { color: var(--text); font-weight: 600; }
+  .stats .good { color: var(--up); }
+  .stats .bad { color: var(--down); }
   .spark { display: flex; gap: 2px; align-items: flex-end; height: 26px; margin-bottom: 10px; }
   .spark i { flex: 1; min-width: 3px; border-radius: 1px; background: var(--up); opacity: .85; }
   .spark i.down { background: var(--down); }
@@ -49,8 +54,9 @@
 </header>
 <main>
   <form class="add" id="addForm">
-    <input id="name" placeholder="Name (e.g. My blog)" required maxlength="80">
-    <input id="url" placeholder="https://example.com" required inputmode="url">
+    <input name="name" id="name" placeholder="Name (e.g. My blog)" required maxlength="80">
+    <input name="url" id="url" placeholder="https://example.com" required inputmode="url">
+    <input name="refreshMin" id="refreshMin" type="number" min="0" step="any" placeholder="Every N min (opt)">
     <button type="submit">Add site</button>
   </form>
   <div id="error"></div>
@@ -73,8 +79,21 @@ function relTime(iso) {
   return Math.floor(h / 24) + 'd ago';
 }
 
+function fmtInterval(ms) {
+  if (ms == null) return '—';
+  if (ms < 60000) return Math.round(ms / 1000) + 's';
+  if (ms < 3600000) { const m = ms / 60000; return (Number.isInteger(m) ? m : m.toFixed(1)) + 'm'; }
+  const h = ms / 3600000; return (Number.isInteger(h) ? h : h.toFixed(1)) + 'h';
+}
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function uptimeCell(v) {
+  if (v == null) return '<b>—</b>';
+  const cls = v >= 99 ? 'good' : v >= 95 ? '' : 'bad';
+  return `<b class="${cls}">${v}%</b>`;
 }
 
 async function sparkline(siteId) {
@@ -100,11 +119,11 @@ async function load() {
     const down = sites.filter(s => s.latest && !s.latest.ok).length;
     const pending = sites.length - up - down;
     summary.innerHTML = sites.length
-      ? `<span class="up">${up} up</span> · <span class="down">${down} down</span>${pending ? ` · ${pending} pending` : ''} · updated ${relTime(new Date().toISOString())}`
+      ? `<span class="up">${up} up</span> · <span class="down">${down} down</span>${pending ? ` · ${pending} pending` : ''}`
       : 'no sites yet';
 
     if (!sites.length) {
-      grid.innerHTML = '<div class="empty">Add your first site above to start monitoring.</div>';
+      grid.innerHTML = '<div class="empty">Add your first site above — or list defaults in settings.json.</div>';
       return;
     }
     const cards = await Promise.all(sites.map(async (s) => {
@@ -117,7 +136,12 @@ async function load() {
         <div class="stats">
           <span>Status <b>${esc(status)}</b></span>
           <span>Latency <b>${s.latest?.response_time_ms != null ? s.latest.response_time_ms + 'ms' : '—'}</b></span>
-          <span>24h uptime <b>${s.uptime24h != null ? s.uptime24h + '%' : '—'}</b></span>
+          <span>Every <b>${fmtInterval(s.refreshMs)}</b></span>
+        </div>
+        <div class="stats">
+          <span>24h ${uptimeCell(s.uptime24h)}</span>
+          <span>7d ${uptimeCell(s.uptime7d)}</span>
+          <span>30d ${uptimeCell(s.uptime30d)}</span>
         </div>
         ${await sparkline(s.id)}
         <div class="foot">
@@ -138,16 +162,20 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
   errorBox.textContent = '';
   const name = document.getElementById('name').value.trim();
   const url = document.getElementById('url').value.trim();
+  const refreshMin = document.getElementById('refreshMin').value.trim();
+  const body = { name, url };
+  if (refreshMin !== '') body.refreshMs = Math.round(Number(refreshMin) * 60000);
   try {
     const r = await fetch('/api/sites', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, url }),
+      body: JSON.stringify(body),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'request failed');
     document.getElementById('name').value = '';
     document.getElementById('url').value = '';
+    document.getElementById('refreshMin').value = '';
     load();
   } catch (err) { errorBox.textContent = err.message; }
 });
