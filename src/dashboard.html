@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Website Health</title>
+<style>
+  :root { --bg: #0f1115; --card: #171b22; --border: #262c36; --text: #e8ecf1; --muted: #8b94a3; --up: #3fb96c; --down: #e5484d; --warn: #f5a524; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 20px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; }
+  #summary { color: var(--muted); font-size: 14px; }
+  #summary .up { color: var(--up); font-weight: 600; }
+  #summary .down { color: var(--down); font-weight: 600; }
+  main { padding: 20px 28px; max-width: 1100px; }
+  .add { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .add input { flex: 1; min-width: 180px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 9px 12px; font-size: 14px; }
+  .add button { background: #2f6fed; border: none; border-radius: 6px; color: #fff; padding: 9px 18px; font-size: 14px; cursor: pointer; }
+  .add button:hover { background: #2459c9; }
+  #error { color: var(--down); font-size: 14px; margin-bottom: 12px; min-height: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card .top { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .dot.up { background: var(--up); box-shadow: 0 0 8px var(--up); }
+  .dot.down { background: var(--down); box-shadow: 0 0 8px var(--down); }
+  .dot.unknown { background: var(--muted); }
+  .card h2 { margin: 0; font-size: 16px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .url { color: var(--muted); font-size: 13px; margin: 6px 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .url a { color: inherit; text-decoration: none; }
+  .card .url a:hover { text-decoration: underline; }
+  .stats { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .stats b { color: var(--text); font-weight: 600; }
+  .spark { display: flex; gap: 2px; align-items: flex-end; height: 26px; margin-bottom: 10px; }
+  .spark i { flex: 1; min-width: 3px; border-radius: 1px; background: var(--up); opacity: .85; }
+  .spark i.down { background: var(--down); }
+  .foot { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+  .del { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+  .del:hover { color: var(--down); border-color: var(--down); }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+  .err-line { color: var(--down); font-size: 12px; margin-top: 6px; word-break: break-word; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Website Health</h1>
+  <span id="summary"></span>
+</header>
+<main>
+  <form class="add" id="addForm">
+    <input id="name" placeholder="Name (e.g. My blog)" required maxlength="80">
+    <input id="url" placeholder="https://example.com" required inputmode="url">
+    <button type="submit">Add site</button>
+  </form>
+  <div id="error"></div>
+  <div class="grid" id="grid"></div>
+</main>
+<script>
+const grid = document.getElementById('grid');
+const summary = document.getElementById('summary');
+const errorBox = document.getElementById('error');
+
+function relTime(iso) {
+  if (!iso) return 'never';
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 10) return 'just now';
+  if (s < 60) return s + 's ago';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function sparkline(siteId) {
+  try {
+    const r = await fetch(`/api/sites/${siteId}/checks?limit=30`);
+    const { checks } = await r.json();
+    const ordered = checks.slice().reverse();
+    if (!ordered.length) return '<div class="spark"></div>';
+    const bars = ordered.map(c => {
+      const h = c.response_time_ms ? Math.min(26, 4 + Math.log10(c.response_time_ms + 1) * 8) : 6;
+      return `<i class="${c.ok ? '' : 'down'}" style="height:${h.toFixed(0)}px" title="${esc(c.checked_at)}${c.status_code ? ' · ' + c.status_code : ''}${c.response_time_ms != null ? ' · ' + c.response_time_ms + 'ms' : ''}"></i>`;
+    }).join('');
+    return `<div class="spark">${bars}</div>`;
+  } catch { return '<div class="spark"></div>'; }
+}
+
+async function load() {
+  try {
+    const r = await fetch('/api/sites');
+    if (!r.ok) throw new Error('API error ' + r.status);
+    const { sites } = await r.json();
+    const up = sites.filter(s => s.latest && s.latest.ok).length;
+    const down = sites.filter(s => s.latest && !s.latest.ok).length;
+    const pending = sites.length - up - down;
+    summary.innerHTML = sites.length
+      ? `<span class="up">${up} up</span> · <span class="down">${down} down</span>${pending ? ` · ${pending} pending` : ''} · updated ${relTime(new Date().toISOString())}`
+      : 'no sites yet';
+
+    if (!sites.length) {
+      grid.innerHTML = '<div class="empty">Add your first site above to start monitoring.</div>';
+      return;
+    }
+    const cards = await Promise.all(sites.map(async (s) => {
+      const dot = !s.latest ? 'unknown' : s.latest.ok ? 'up' : 'down';
+      const status = !s.latest ? 'waiting for first check'
+        : s.latest.ok ? `UP · ${s.latest.status_code}` : `DOWN${s.latest.status_code ? ' · ' + s.latest.status_code : ''}`;
+      return `<div class="card" data-id="${s.id}">
+        <div class="top"><span class="dot ${dot}"></span><h2 title="${esc(s.name)}">${esc(s.name)}</h2></div>
+        <div class="url"><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a></div>
+        <div class="stats">
+          <span>Status <b>${esc(status)}</b></span>
+          <span>Latency <b>${s.latest?.response_time_ms != null ? s.latest.response_time_ms + 'ms' : '—'}</b></span>
+          <span>24h uptime <b>${s.uptime24h != null ? s.uptime24h + '%' : '—'}</b></span>
+        </div>
+        ${await sparkline(s.id)}
+        <div class="foot">
+          <span>checked ${relTime(s.latest?.checked_at)}</span>
+          <button class="del" data-del="${s.id}">remove</button>
+        </div>
+        ${s.latest?.error ? `<div class="err-line">${esc(s.latest.error)}</div>` : ''}
+      </div>`;
+    }));
+    grid.innerHTML = cards.join('');
+  } catch (e) {
+    errorBox.textContent = 'Could not load sites: ' + e.message;
+  }
+}
+
+document.getElementById('addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errorBox.textContent = '';
+  const name = document.getElementById('name').value.trim();
+  const url = document.getElementById('url').value.trim();
+  try {
+    const r = await fetch('/api/sites', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, url }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'request failed');
+    document.getElementById('name').value = '';
+    document.getElementById('url').value = '';
+    load();
+  } catch (err) { errorBox.textContent = err.message; }
+});
+
+grid.addEventListener('click', async (e) => {
+  const id = e.target?.dataset?.del;
+  if (!id) return;
+  if (!confirm('Stop monitoring this site? Its history will be deleted.')) return;
+  await fetch('/api/sites/' + id, { method: 'DELETE' });
+  load();
+});
+
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>
