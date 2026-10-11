@@ -1,4 +1,5 @@
 import { latestPerSite, recordCheck, pruneOld, RETENTION_DAYS } from './db.js';
+import { notifyFailingSites } from './notifications.js';
 
 const TICK_MS = 10_000; // scheduler granularity: due sites are picked up each tick
 const PRUNE_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -47,7 +48,7 @@ export async function checkSite(url, timeoutSec) {
  * Every TICK_MS, check sites whose last check is older than their refresh
  * interval. getRefreshSec(site) resolves the effective interval in seconds.
  */
-export function startScheduler({ timeoutSec, getRefreshSec, retentionDays = RETENTION_DAYS }) {
+export function startScheduler({ timeoutSec, getRefreshSec, notifications = {}, retentionDays = RETENTION_DAYS }) {
   let lastPrune = 0;
 
   const tick = async () => {
@@ -70,7 +71,7 @@ export function startScheduler({ timeoutSec, getRefreshSec, retentionDays = RETE
     });
     if (!due.length) return;
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       due.map(async (site) => {
         const result = await checkSite(site.url, timeoutSec);
         recordCheck(site.id, result);
@@ -80,8 +81,24 @@ export function startScheduler({ timeoutSec, getRefreshSec, retentionDays = RETE
             ` ${fmtSec(result.response_time_ms)}` +
             (result.error ? ` :: ${result.error}` : '')
         );
+        return { ...site, ...result };
       })
     );
+
+    const failedSites = results
+      .map((result) => (result.status === 'fulfilled' ? result.value : null))
+      .filter((site) => site && !site.ok)
+      .map((site) => ({
+        id: site.id,
+        name: site.name,
+        url: site.url,
+        checked_at: new Date().toISOString(),
+        last_notified_at: site.last_notified_at,
+      }));
+
+    if (failedSites.length) {
+      await notifyFailingSites({ notifications, failingSites: failedSites, now });
+    }
   };
 
   tick().catch((err) => console.error('[scheduler] initial tick failed:', err));

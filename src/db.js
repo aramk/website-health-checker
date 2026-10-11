@@ -17,6 +17,7 @@ db.exec(`
     name TEXT NOT NULL,
     url TEXT NOT NULL UNIQUE,
     refresh_sec INTEGER,
+    last_notified_at TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
   CREATE TABLE IF NOT EXISTS checks (
@@ -47,10 +48,14 @@ db.exec(`
     }
     console.log('[db] migrated: sites.refresh_ms (ms) -> sites.refresh_sec (s)');
   }
+  if (!cols.includes('last_notified_at')) {
+    db.exec('ALTER TABLE sites ADD COLUMN last_notified_at TEXT');
+    console.log('[db] migrated: sites.last_notified_at');
+  }
 }
 
 export function listSites() {
-  return db.prepare('SELECT id, name, url, refresh_sec, created_at FROM sites ORDER BY name').all();
+  return db.prepare('SELECT id, name, url, refresh_sec, last_notified_at, created_at FROM sites ORDER BY name').all();
 }
 
 export function addSite(name, url, refreshSec = null) {
@@ -60,20 +65,27 @@ export function addSite(name, url, refreshSec = null) {
   return { id: Number(info.lastInsertRowid), name, url, refreshSec };
 }
 
+export function updateSiteLastNotifiedAt(siteId, timestamp) {
+  if (!timestamp) return false;
+  const result = db.prepare('UPDATE sites SET last_notified_at = ? WHERE id = ?').run(timestamp, siteId);
+  return result.changes > 0;
+}
+
 /**
  * Insert settings-file sites; on URL conflict update the name and the
  * per-site refresh (a null refresh in settings keeps whatever is stored).
  */
 export function upsertSites(sites) {
   const stmt = db.prepare(`
-    INSERT INTO sites (name, url, refresh_sec) VALUES (?, ?, ?)
+    INSERT INTO sites (name, url, refresh_sec, last_notified_at) VALUES (?, ?, ?, ?)
     ON CONFLICT(url) DO UPDATE SET
       name = excluded.name,
-      refresh_sec = COALESCE(excluded.refresh_sec, sites.refresh_sec)
+      refresh_sec = COALESCE(excluded.refresh_sec, sites.refresh_sec),
+      last_notified_at = COALESCE(excluded.last_notified_at, sites.last_notified_at)
   `);
   let n = 0;
   for (const s of sites) {
-    stmt.run(s.name, s.url, s.refreshSec ?? null);
+    stmt.run(s.name, s.url, s.refreshSec ?? null, s.lastNotifiedAt ?? null);
     n++;
   }
   return n;
@@ -84,7 +96,7 @@ export function updateSite(id, { name, refreshSec }) {
   if (!existing) return null;
   if (name !== undefined) db.prepare('UPDATE sites SET name = ? WHERE id = ?').run(name, id);
   if (refreshSec !== undefined) db.prepare('UPDATE sites SET refresh_sec = ? WHERE id = ?').run(refreshSec, id);
-  return db.prepare('SELECT id, name, url, refresh_sec, created_at FROM sites WHERE id = ?').get(id);
+  return db.prepare('SELECT id, name, url, refresh_sec, last_notified_at, created_at FROM sites WHERE id = ?').get(id);
 }
 
 export function removeSite(id) {
@@ -108,7 +120,7 @@ export function pruneOld(retentionDays = RETENTION_DAYS) {
 /** One row per site with its most recent check (null when never checked). */
 export function latestPerSite() {
   return db.prepare(`
-    SELECT s.id, s.name, s.url, s.refresh_sec, s.created_at,
+    SELECT s.id, s.name, s.url, s.refresh_sec, s.last_notified_at, s.created_at,
            c.checked_at, c.status_code, c.ok, c.response_time_ms, c.error
     FROM sites s
     LEFT JOIN checks c ON c.id = (

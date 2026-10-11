@@ -25,18 +25,49 @@ committed). Edit it and restart to configure your sites.
 ```json
 {
   "defaultRefreshSec": 300,
+  "notifications": {
+    "email": {
+      "enabled": true,
+      "rootUrl": "https://status.example.com",
+      "mailUrl": "smtp://user:pass@smtp.example.com:587",
+      "from": "Website Health Alerts <alerts@example.com>",
+      "recipients": ["ops@example.com", "oncall@example.com"],
+      "notifyEverySec": 3600,
+      "groupFailuresIntoSingleEmail": true,
+      "htmlTemplatePath": "./templates/website-down-email.html"
+    }
+  },
   "sites": [
-    { "name": "Google", "url": "https://www.google.com" },
-    { "name": "My blog", "url": "https://example.com/blog", "refreshSec": 60 }
+    {
+      "name": "Google",
+      "url": "https://www.google.com",
+      "lastNotifiedAt": "2026-10-11T12:00:00.000Z"
+    },
+    {
+      "name": "My blog",
+      "url": "https://example.com/blog",
+      "refreshSec": 60,
+      "lastNotifiedAt": "2026-10-11T12:00:00.000Z"
+    }
   ]
 }
 ```
-All times are in seconds.
+All times are in seconds, except `lastNotifiedAt`, which is an ISO-8601 timestamp for when the most recent email alert was sent for that site.
 
 - `defaultRefreshSec` — how often every site is checked, in seconds (default: 300 = 5 minutes).
+- `notifications.email` — optional alert settings for when a site goes down.
+  - `enabled` — turns the alerting flow on or off.
+  - `rootUrl` — public base URL of the dashboard, used as the `dashboardUrl` in the notification email.
+  - `mailUrl` — URL for the outbound mail transport (for example `smtp://user:pass@smtp.example.com:587`).
+  - `from` — sender address shown in the email.
+  - `recipients` — list of recipients that should receive downtime alerts.
+  - `notifyEverySec` — minimum seconds between alerts for the same site; defaults to 3600 (one hour).
+  - `groupFailuresIntoSingleEmail` — prefer a single grouped alert email for all failing sites instead of one message per site.
+  - `htmlTemplatePath` — path to an HTML email template used for the notification body.
 - `sites` — sites to monitor. Each has `name`, `url`, and an optional
   `refreshSec` that overrides the default for that site (minimum 5; lower
-  values are raised to 5).
+  values are raised to 5). A site may also include `lastNotifiedAt` to record
+  the last date that a website alert was emailed.
 - On startup the listed sites are **upserted** into the database (matched by
   URL): new ones are added, and the name / per-site refresh of existing ones
   is updated. A `refreshSec` omitted in the file keeps whatever is stored.

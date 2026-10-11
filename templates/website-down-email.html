@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{subject}}</title>
+  </head>
+  <body style="margin: 0; padding: 0; background: #f4f7fb; font-family: Arial, sans-serif; color: #1f2937;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f4f7fb; padding: 32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" max-width="640" cellpadding="0" cellspacing="0" style="background: #ffffff; border-radius: 8px; border: 1px solid #e5e7eb; overflow: hidden;">
+            <tr>
+              <td style="padding: 24px 32px; background: #d14343; color: #ffffff; font-size: 24px; font-weight: 700;">
+                Website down alert
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 24px 32px;">
+                <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6;">
+                  The following websites are currently failing or unreachable:
+                </p>
+
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 14px;">
+                  {{#each failingSites}}
+                  <tr>
+                    <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                      <strong>{{name}}</strong><br />
+                      <a href="{{url}}" style="color: #2563eb; text-decoration: none;">{{url}}</a><br />
+                      <span style="color: #6b7280;">Last checked: {{lastCheckedAt}}</span>
+                    </td>
+                  </tr>
+                  {{/each}}
+                </table>
+
+                <p style="margin: 24px 0 0; font-size: 14px; line-height: 1.6; color: #374151;">
+                  Please investigate these outages and consult the dashboard for the latest status:
+                  <a href="{{dashboardUrl}}" style="color: #2563eb; text-decoration: none;">{{dashboardUrl}}</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

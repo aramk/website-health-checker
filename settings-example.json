@@ -1,14 +1,31 @@
 {
   "defaultRefreshSec": 300,
+  "notifications": {
+    "email": {
+      "enabled": true,
+      "rootUrl": "https://status.example.com",
+      "mailUrl": "smtp://user:pass@smtp.example.com:587",
+      "from": "Website Health Alerts <alerts@example.com>",
+      "recipients": [
+        "ops@example.com",
+        "oncall@example.com"
+      ],
+      "notifyEverySec": 3600,
+      "groupFailuresIntoSingleEmail": true,
+      "htmlTemplatePath": "./templates/website-down-email.html"
+    }
+  },
   "sites": [
     {
       "name": "Google",
-      "url": "https://www.google.com"
+      "url": "https://www.google.com",
+      "lastNotifiedAt": "2026-10-11T12:00:00.000Z"
     },
     {
       "name": "My blog",
       "url": "https://example.com/blog",
-      "refreshSec": 60
+      "refreshSec": 60,
+      "lastNotifiedAt": "2026-10-11T12:00:00.000Z"
     }
   ]
 }

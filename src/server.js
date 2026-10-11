@@ -187,5 +187,5 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[server] dashboard at http://localhost:${PORT}`);
   console.log(`[server] scheduler tick 10s, per-site refresh (default ${settings.defaultRefreshSec}s), timeout ${CHECK_TIMEOUT_SEC}s`);
-  startScheduler({ timeoutSec: CHECK_TIMEOUT_SEC, getRefreshSec });
+  startScheduler({ timeoutSec: CHECK_TIMEOUT_SEC, getRefreshSec, notifications: settings.notifications });
 });
