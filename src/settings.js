@@ -95,10 +95,10 @@ export function loadSettings() {
           groupFailuresIntoSingleEmail: Boolean(
             parsed.notifications.email?.groupFailuresIntoSingleEmail ?? parsed.notifications.groupFailuresIntoSingleEmail ?? true,
           ),
-          notifyEverySec: Number(
-            parsed.notifications.email?.notifyEverySec ?? parsed.notifications.notifyEverySec ?? parsed.notifications.email?.notify_every_sec ?? parsed.notifications.notify_every_sec ?? 3600,
+          notifyIntervalSec: Number(
+            parsed.notifications.email?.notifyIntervalSec ?? parsed.notifications.notifyIntervalSec ?? parsed.notifications.email?.notify_every_sec ?? parsed.notifications.notify_every_sec ?? 3600,
           ) > 0
-            ? Math.max(1, Math.round(Number(parsed.notifications.email?.notifyEverySec ?? parsed.notifications.notifyEverySec ?? parsed.notifications.email?.notify_every_sec ?? parsed.notifications.notify_every_sec ?? 3600)))
+            ? Math.max(1, Math.round(Number(parsed.notifications.email?.notifyIntervalSec ?? parsed.notifications.notifyIntervalSec ?? parsed.notifications.email?.notify_every_sec ?? parsed.notifications.notify_every_sec ?? 3600)))
             : 3600,
           htmlTemplatePath: typeof parsed.notifications.email?.htmlTemplatePath === 'string'
             ? parsed.notifications.email.htmlTemplatePath.trim()
@@ -115,7 +115,7 @@ export function loadSettings() {
           from: '',
           recipients: [],
           groupFailuresIntoSingleEmail: true,
-          notifyEverySec: 3600,
+          notifyIntervalSec: 3600,
           htmlTemplatePath: '',
         },
       };

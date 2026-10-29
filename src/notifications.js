@@ -72,7 +72,7 @@ export async function sendNotificationEmail({ config, failingSites, subject, das
 
   try {
     const info = await mailTransport.sendMail({
-      from: config.from || 'Website Health Alerts <alerts@example.com>',
+      from: config.from,
       to: recipients,
       subject,
       html,
@@ -92,11 +92,11 @@ export async function notifyFailingSites({ notifications, failingSites, now }) {
   const emailCfg = notifications?.email;
   if (!emailCfg?.enabled) return [];
 
-  const notifyEveryMs = Math.max(1, Number(emailCfg.notifyEverySec ?? 3600)) * 1000;
+  const notifyIntervalMs = Math.max(1, Number(emailCfg.notifyIntervalSec ?? 3600)) * 1000;
   const eligible = failingSites.filter((site) => {
     if (!site.last_notified_at) return true;
     const lastNotifiedAt = new Date(site.last_notified_at).getTime();
-    return Number.isFinite(lastNotifiedAt) ? now - lastNotifiedAt >= notifyEveryMs : true;
+    return Number.isFinite(lastNotifiedAt) ? now - lastNotifiedAt >= notifyIntervalMs : true;
   });
 
   if (!eligible.length) return [];
@@ -105,7 +105,7 @@ export async function notifyFailingSites({ notifications, failingSites, now }) {
   const subject = eligible.length > 1 ? 'Website Health Alert: Multiple sites are down' : `Website Health Alert: ${eligible[0].name} is down`;
 
   const eligibleNames = eligible.map((site) => site.name || site.url).join(', ');
-  console.log(`[mail] ${eligible.length} down site(s) eligible for notification (${eligibleNames}); checking cooldown window (${emailCfg.notifyEverySec ?? 3600}s)`);
+  console.log(`[mail] ${eligible.length} down site(s) eligible for notification (${eligibleNames}); checking cooldown window (${emailCfg.notifyIntervalSec ?? 3600}s)`);
 
   try {
     const result = await sendNotificationEmail({

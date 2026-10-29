@@ -10,7 +10,7 @@
         "ops@example.com",
         "oncall@example.com"
       ],
-      "notifyEverySec": 3600,
+      "notifyIntervalSec": 3600,
       "groupFailuresIntoSingleEmail": true,
       "htmlTemplatePath": "./templates/website-down-email.html"
     }

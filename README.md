@@ -32,7 +32,7 @@ committed). Edit it and restart to configure your sites.
       "mailUrl": "smtp://user:pass@smtp.example.com:587",
       "from": "Website Health Alerts <alerts@example.com>",
       "recipients": ["ops@example.com", "oncall@example.com"],
-      "notifyEverySec": 3600,
+      "notifyIntervalSec": 3600,
       "groupFailuresIntoSingleEmail": true,
       "htmlTemplatePath": "./templates/website-down-email.html"
     }
@@ -61,7 +61,7 @@ All times are in seconds, except `lastNotifiedAt`, which is an ISO-8601 timestam
   - `mailUrl` — URL for the outbound mail transport (for example `smtp://user:pass@smtp.example.com:587`).
   - `from` — sender address shown in the email.
   - `recipients` — list of recipients that should receive downtime alerts.
-  - `notifyEverySec` — minimum seconds between alerts for the same site; defaults to 3600 (one hour).
+  - `notifyIntervalSec` — minimum seconds between alerts for the same site; defaults to 3600 (one hour).
   - `groupFailuresIntoSingleEmail` — prefer a single grouped alert email for all failing sites instead of one message per site.
   - `htmlTemplatePath` — path to an HTML email template used for the notification body.
 - `sites` — sites to monitor. Each has `name`, `url`, and an optional
