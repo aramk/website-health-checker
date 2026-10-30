@@ -14,6 +14,25 @@ npm start
 # dashboard at http://localhost:3000
 ```
 
+### HTTPS with Caddy (local)
+
+Caddy can provide local HTTPS while proxying to the app's HTTP server. Install
+Caddy, then run the app and proxy in separate terminals:
+
+```sh
+npm start
+~/.local/bin/caddy run --config ./Caddyfile
+```
+
+Open `https://localhost:8443`. To trust Caddy's local certificate authority on
+this Mac, run `~/.local/bin/caddy trust` once; macOS may ask for administrator
+authentication. Set `notifications.email.rootUrl` to `https://localhost:8443`
+if notification emails should link to this local dashboard.
+
+The included Caddyfile is for local development. For a public deployment, use
+your domain in the Caddyfile, point its DNS to the server, and allow inbound
+ports 80 and 443 so Caddy can provision a trusted certificate.
+
 On the first run, `settings.json` is created automatically from
 `settings-example.json` (it's gitignored — your local config never gets
 committed). Edit it and restart to configure your sites.
